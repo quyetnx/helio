@@ -1,0 +1,41 @@
+# Verify the service images still build when Docker inputs or app code change.
+# Build only (no push) — publishing is release.yml's job.
+name: docker-build
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'infra/docker/**'
+      - 'apps/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.dockerignore'
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [web, api, ingest, tracking, workers, intelligence, migrate, backup, updater]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/${{ matrix.service }}.Dockerfile
+          push: false
+          build-args: |
+            HELIO_VERSION=pr-${{ github.event.number }}
+            HELIO_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=pr-${{ matrix.service }},mode=max

@@ -1,0 +1,51 @@
+# Manual, opt-in deploy of a released version to a Kubernetes cluster with the
+# in-repo Helm chart. Needs a `production` environment (add required reviewers
+# there) with secrets KUBE_CONFIG (base64 kubeconfig) and HELM_VALUES (the
+# contents of your values-prod.yaml). Compose/self-host installs update via the
+# `updater` image instead (see docs/runbooks/production-ops.md).
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Released tag to deploy (e.g. v2.3.1)
+        required: true
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  helm:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$'
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
+      - uses: azure/setup-helm@v4
+      - name: Configure cluster access
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+          HELM_VALUES: ${{ secrets.HELM_VALUES }}
+        run: |
+          umask 077
+          printf '%s' "$KUBE_CONFIG" | base64 -d > "$RUNNER_TEMP/kubeconfig"
+          printf '%s' "$HELM_VALUES" > "$RUNNER_TEMP/values-prod.yaml"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Helm upgrade
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          helm upgrade --install helio infra/helm/helio \
+            -f "$RUNNER_TEMP/values-prod.yaml" \
+            --set image.tag="$VERSION" \
+            --atomic --timeout 10m
