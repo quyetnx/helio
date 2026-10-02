@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from anthropic import AsyncAnthropic
+from anthropic import AsyncAnthropic, BadRequestError
 
 from .types import (
     LLMResponse,
@@ -25,6 +25,15 @@ from .types import (
 
 # Anthropic requires an explicit max; pick a generous default.
 _DEFAULT_MAX_TOKENS = 2048
+
+
+def _rejects_temperature(error: BadRequestError) -> bool:
+    """True when the API refused the request because of ``temperature``.
+
+    Newer Claude models no longer accept the sampling parameter and answer
+    400 (e.g. "`temperature` is deprecated for this model").
+    """
+    return "temperature" in str(error).lower()
 
 
 def _to_anthropic_messages(messages: Sequence[Message]) -> tuple[str, list[dict[str, Any]]]:
@@ -81,6 +90,8 @@ class AnthropicProvider:
         self.name = name
         self.model = model
         self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, timeout=timeout)
+        # Flipped once the model rejects ``temperature``; later calls omit it.
+        self._temperature_supported = True
 
     async def complete(
         self,
@@ -107,10 +118,17 @@ class AnthropicProvider:
                 }
                 for tool in tools
             ]
-        if temperature is not None:
+        if temperature is not None and self._temperature_supported:
             kwargs["temperature"] = temperature
 
-        response = await self._client.messages.create(**kwargs)
+        try:
+            response = await self._client.messages.create(**kwargs)
+        except BadRequestError as error:
+            if "temperature" not in kwargs or not _rejects_temperature(error):
+                raise
+            self._temperature_supported = False
+            del kwargs["temperature"]
+            response = await self._client.messages.create(**kwargs)
 
         text_parts: list[str] = []
         tool_calls: list[ToolCall] = []

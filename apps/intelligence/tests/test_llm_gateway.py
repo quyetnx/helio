@@ -3,6 +3,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from anthropic import BadRequestError
 from pydantic import SecretStr
 
 from helio_intelligence.llm import (
@@ -157,6 +158,42 @@ async def test_anthropic_provider_parses_blocks() -> None:
     assert result.tool_calls[0].name == "build_segment"
     assert result.tool_calls[0].arguments == {"plan": "pro"}
     assert result.usage.completion_tokens == 2
+
+
+def _bad_request(message: str) -> BadRequestError:
+    response = MagicMock(status_code=400, headers={})
+    return BadRequestError(message, response=response, body=None)
+
+
+async def test_anthropic_retries_without_temperature_when_rejected() -> None:
+    ok = MagicMock(
+        content=[MagicMock(type="text", text="ok")],
+        stop_reason="end_turn",
+        usage=MagicMock(input_tokens=1, output_tokens=1),
+    )
+    create = AsyncMock(
+        side_effect=[_bad_request("`temperature` is deprecated for this model"), ok, ok]
+    )
+    with patch("helio_intelligence.llm.anthropic_provider.AsyncAnthropic") as client_cls:
+        client_cls.return_value.messages.create = create
+        provider = AnthropicProvider(api_key="k", model="claude-x")
+        first = await provider.complete([UserMessage("hi")], temperature=0.2)
+        await provider.complete([UserMessage("again")], temperature=0.2)
+    assert first.text == "ok"
+    assert "temperature" in create.call_args_list[0].kwargs
+    assert "temperature" not in create.call_args_list[1].kwargs
+    # remembered: the next call never sends it
+    assert "temperature" not in create.call_args_list[2].kwargs
+
+
+async def test_anthropic_reraises_unrelated_bad_requests() -> None:
+    create = AsyncMock(side_effect=_bad_request("max_tokens must be positive"))
+    with patch("helio_intelligence.llm.anthropic_provider.AsyncAnthropic") as client_cls:
+        client_cls.return_value.messages.create = create
+        provider = AnthropicProvider(api_key="k", model="claude-x")
+        with pytest.raises(BadRequestError):
+            await provider.complete([UserMessage("hi")], temperature=0.2)
+    assert create.await_count == 1
 
 
 def test_factory_selects_groq_with_default_base_url() -> None:
