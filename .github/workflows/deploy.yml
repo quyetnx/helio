@@ -1,25 +1,31 @@
-# Deploy a released version to the server this self-hosted runner lives on
-# (a Docker Compose install made by scripts/install.sh, managed via
-# ~/.helio/helio). The job runs ON the server, so no SSH keys or kubeconfig
-# are stored in GitHub. Trigger it by hand, or let it follow a published
-# release. `helio update` takes a pre-update DB backup, applies the bundle and
-# runs migrations; a failed backup or migration aborts the deploy.
+# Install or update Helio on the server this self-hosted runner lives on (a
+# Docker Compose install managed via ~/.helio/helio). The job runs ON the
+# server, so no SSH keys or kubeconfig are stored in GitHub.
 #
-# The runner needs the label `helio-deploy` (see docs/runbooks/production-ops.md
-# for registering it next to other runners) and a user that can run docker and
-# owns $HOME/.helio. Set the Variables APP_URL (e.g. https://mailbot.io.vn) and
-# optionally PUBLIC_TRACKING_URL on the `production` environment, and add
-# required reviewers there to gate deploys.
+# First run installs; later runs update (`helio update` takes a pre-update DB
+# backup, applies the bundle and migrates; a failed backup/migration aborts).
+# Release bundles and images come from the repo named by the HELIO_REPO
+# Variable (default: the upstream project, whose v* images are public). Point
+# it at this repo only after release.yml has published your own release.
+#
+# Setup: a runner labelled `helio-deploy` whose user can run docker and owns
+# $HOME/.helio; Variables APP_URL (e.g. https://mailbot.io.vn) and optionally
+# PUBLIC_TRACKING_URL / HELIO_REPO on the `production` environment, where you
+# can also add required reviewers to gate deploys.
 name: deploy
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Released tag to deploy (e.g. v2.3.1)
-        required: true
-  release:
-    types: [released]
+        description: Release tag (e.g. v2.3.1); empty = latest
+        required: false
+        default: ''
+      profile:
+        description: full (~8 GB RAM) or core (~2.5 GB RAM) — used on first install only
+        type: choice
+        options: [full, core]
+        default: full
 
 concurrency:
   group: deploy-production
@@ -32,31 +38,41 @@ jobs:
   deploy:
     runs-on: [self-hosted, linux, helio-deploy]
     environment: production
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
-      # Never interpolate event input into the shell; it goes through env.
-      VERSION: ${{ inputs.version || github.event.release.tag_name }}
+      # Never interpolate input into the shell; it goes through env.
+      VERSION: ${{ inputs.version }}
+      PROFILE: ${{ inputs.profile }}
+      HELIO_REPO: ${{ vars.HELIO_REPO || 'achref-soua/helio' }}
+      APP_URL: ${{ vars.APP_URL }}
+      PUBLIC_TRACKING_URL: ${{ vars.PUBLIC_TRACKING_URL }}
+      HELIO_YES: '1'
+      HELIO_NO_BROWSER: '1'
     steps:
-      - name: Validate version
-        run: printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$'
-      - name: Wait for the release images and bundle
-        # release.yml uploads the install bundle after publishing images; on a
-        # `release: released` trigger it may still be running.
+      - name: Validate inputs
         run: |
-          for i in $(seq 1 30); do
-            if curl -fsIL "https://github.com/${{ github.repository }}/releases/download/${VERSION}/checksums.txt" >/dev/null; then exit 0; fi
-            sleep 60
-          done
-          echo "release assets for $VERSION never appeared" >&2; exit 1
-      - name: Update Helio
-        run: '$HOME/.helio/helio update --version "$VERSION" --yes'
+          set -eu
+          [ -z "$VERSION" ] || printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$'
+          printf '%s' "$HELIO_REPO" | grep -Eq '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'
+          [ -n "$APP_URL" ] || { echo "set the APP_URL variable (e.g. https://mailbot.io.vn)" >&2; exit 1; }
+          printf '%s' "$APP_URL" | grep -Eq '^https?://[A-Za-z0-9.:-]+$' \
+            || { echo "APP_URL must be scheme://host[:port], no trailing slash" >&2; exit 1; }
+      - name: Install or update Helio
+        run: |
+          set -eu
+          HELIO="$HOME/.helio/helio"
+          if [ -x "$HELIO" ]; then
+            "$HELIO" update ${VERSION:+--version "$VERSION"} --yes
+          else
+            export HELIO_APP_URL="$APP_URL"
+            curl -fsSL "https://raw.githubusercontent.com/$HELIO_REPO/main/scripts/install.sh" -o "$RUNNER_TEMP/install.sh"
+            sh "$RUNNER_TEMP/install.sh" install --yes \
+              ${VERSION:+--version "$VERSION"} \
+              $([ "$PROFILE" = core ] && echo --core)
+          fi
       - name: Apply public URLs from GitHub Variables
         # `helio update` only appends new keys to .env, so values that live in
-        # repo/environment Variables (APP_URL, PUBLIC_TRACKING_URL) are synced
-        # here. The stack restarts only when a value actually changed.
-        env:
-          APP_URL: ${{ vars.APP_URL }}
-          PUBLIC_TRACKING_URL: ${{ vars.PUBLIC_TRACKING_URL }}
+        # Variables are synced here. The stack restarts only on a change.
         run: |
           set -eu
           ENV_FILE="$HOME/.helio/.env"
