@@ -8,7 +8,7 @@
 # builds ghcr.io/<owner>/helio-* and the bundle on every v* tag). Set the
 # HELIO_REPO Variable only to deploy from a different repo.
 #
-# Setup: a runner labelled `helio-deploy` whose user can run docker and owns
+# Setup: a self-hosted Linux runner (registered for this repo only) whose user can run docker and owns
 # $HELIO_HOME (default $HOME/.helio); Variables APP_URL (e.g. https://mailbot.io.vn) and optionally
 # PUBLIC_TRACKING_URL / HELIO_REPO on the `production` environment, where you
 # can also add required reviewers to gate deploys.
@@ -37,7 +37,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, linux, helio-deploy]
+    runs-on: [self-hosted, linux]
     environment: production
     timeout-minutes: 60
     env:
