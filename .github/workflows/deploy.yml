@@ -1,0 +1,53 @@
+# Deploy a released version to the server this self-hosted runner lives on
+# (a Docker Compose install made by scripts/install.sh, managed via
+# ~/.helio/helio). The job runs ON the server, so no SSH keys or kubeconfig
+# are stored in GitHub. Trigger it by hand, or let it follow a published
+# release. `helio update` takes a pre-update DB backup, applies the bundle and
+# runs migrations; a failed backup or migration aborts the deploy.
+#
+# The runner needs the label `helio-deploy` (see docs/runbooks/production-ops.md
+# for registering it next to other runners) and a user that can run docker and
+# owns $HOME/.helio. Add required reviewers to the `production` environment to
+# gate deploys.
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Released tag to deploy (e.g. v2.3.1)
+        required: true
+  release:
+    types: [released]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, helio-deploy]
+    environment: production
+    timeout-minutes: 30
+    env:
+      # Never interpolate event input into the shell; it goes through env.
+      VERSION: ${{ inputs.version || github.event.release.tag_name }}
+    steps:
+      - name: Validate version
+        run: printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$'
+      - name: Wait for the release images and bundle
+        # release.yml uploads the install bundle after publishing images; on a
+        # `release: released` trigger it may still be running.
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsIL "https://github.com/${{ github.repository }}/releases/download/${VERSION}/checksums.txt" >/dev/null; then exit 0; fi
+            sleep 60
+          done
+          echo "release assets for $VERSION never appeared" >&2; exit 1
+      - name: Update Helio
+        run: "$HOME/.helio/helio update --version \"$VERSION\" --yes"
+      - name: Status
+        run: '"$HOME/.helio/helio" status'

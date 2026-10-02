@@ -1,0 +1,30 @@
+# ADR-0009: release-please watches `main`, maintains the release PR
+# (version + CHANGELOG) and, when that PR merges, cuts the tag + GitHub release.
+# Tags created with GITHUB_TOKEN do not trigger other workflows, so the publish
+# pipeline (release.yml) is dispatched explicitly against the new tag.
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: rp
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - name: Publish images and install bundle
+        if: steps.rp.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.rp.outputs.tag_name }}
+        run: gh workflow run release.yml --repo "${{ github.repository }}" --ref "$TAG"

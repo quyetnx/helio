@@ -1,6 +1,5 @@
-# The ONLY workflow in this repository, by design: day-to-day CI is the
-# local `task verify` gate, and Actions runs exclusively on release tags —
-# no push/PR jobs, no schedules, no notification noise.
+# Release publishing, triggered by a `v*` tag. Per-PR checks live in ci.yml,
+# security.yml, pr-title.yml and docker-build.yml; release-please.yml cuts the tag.
 #
 # Release mechanic (docs/runbooks/production-ops.md):
 #   1. `gh release create vX.Y.Z --target main --notes …` creates the tag
