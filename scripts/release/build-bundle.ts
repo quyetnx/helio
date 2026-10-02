@@ -9,7 +9,7 @@
  *   dist/helio-bundle-<version>.tar.gz
  *   dist/checksums.txt
  *
- * Run: pnpm exec tsx scripts/release/build-bundle.ts [--version vX.Y.Z]
+ * Run: pnpm exec tsx scripts/release/build-bundle.ts [--version vX.Y.Z] [--image-namespace <owner>]
  * (defaults to the root package.json version). The release workflow and
  * `task release:bundle` both call this.
  */
@@ -20,7 +20,9 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 const root = path.resolve(import.meta.dirname, '../..');
-const { values } = parseArgs({ options: { version: { type: 'string' } } });
+const { values } = parseArgs({
+  options: { version: { type: 'string' }, 'image-namespace': { type: 'string' } },
+});
 
 const packageVersion = (
   JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as { version: string }
@@ -48,7 +50,17 @@ if (!composeTemplate.includes('__HELIO_VERSION__')) {
   console.error('compose template has no __HELIO_VERSION__ markers — wrong file?');
   process.exit(1);
 }
-const compose = composeTemplate.replaceAll('__HELIO_VERSION__', version);
+// Images are published to ghcr.io/<namespace>/helio-*; the template names the
+// upstream namespace, so a fork's release pins its own images instead.
+const upstreamNamespace = 'achref-soua';
+const imageNamespace = (values['image-namespace'] ?? upstreamNamespace).toLowerCase();
+if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(imageNamespace)) {
+  console.error(`refusing malformed image namespace "${imageNamespace}"`);
+  process.exit(1);
+}
+const compose = composeTemplate
+  .replaceAll('__HELIO_VERSION__', version)
+  .replaceAll(`ghcr.io/${upstreamNamespace}/`, `ghcr.io/${imageNamespace}/`);
 writeFileSync(path.join(bundleDir, 'docker-compose.yml'), compose);
 
 // 2. The env template, verbatim (the CLI fills the markers at install).

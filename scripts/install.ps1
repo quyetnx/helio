@@ -6,7 +6,7 @@
 # bundle, checks its checksum, generates this install's secrets, and brings
 # the stack up.
 #
-#   irm https://raw.githubusercontent.com/achref-soua/helio/main/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/quyetnx/helio/main/scripts/install.ps1 | iex
 #   # or, downloaded:  .\install.ps1 [install|update|uninstall|start|stop|status] [-Core] [-Version vX.Y.Z] [-Yes]
 #   Installs the full stack by default; pass -Core for a minimal host (no event
 #   tracking, analytics, or journeys).
@@ -23,7 +23,7 @@ param(
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$Repo       = if ($env:HELIO_REPO) { $env:HELIO_REPO } else { 'achref-soua/helio' }
+$Repo       = if ($env:HELIO_REPO) { $env:HELIO_REPO } else { 'quyetnx/helio' }
 $HelioHome  = if ($env:HELIO_HOME) { $env:HELIO_HOME } else { Join-Path $env:USERPROFILE '.helio' }
 $ComposeFile = Join-Path $HelioHome 'docker-compose.yml'
 $EnvFile     = Join-Path $HelioHome '.env'

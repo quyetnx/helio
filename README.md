@@ -143,13 +143,13 @@ One-time prerequisite: Docker — a normal, free app install ([Desktop](https://
 **Linux / macOS / servers & VMs**
 
 ```bash
-curl -fsSL https://github.com/achref-soua/helio/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/quyetnx/helio/releases/latest/download/install.sh | sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-irm https://github.com/achref-soua/helio/releases/latest/download/install.ps1 | iex
+irm https://github.com/quyetnx/helio/releases/latest/download/install.ps1 | iex
 ```
 
 The installer is a plain script — nothing for antivirus or SmartScreen to flag — that checks Docker (and offers to set it up on Windows/Linux), generates this installation's secrets, verifies the release bundle's checksum, pulls release-pinned images, runs migrations, starts the stack, and opens the dashboard; create the first account there and it becomes the administrator. It also saves itself as `~/.helio/helio`, so day 2 is just as boring: run it with no argument for an interactive menu, or pass a command — `helio status`, `helio logs`, `helio update` (which takes a safety backup first), `helio stop`. Leaving is one command too: `helio uninstall` stops and removes the stack but keeps your data; `helio uninstall --purge-data` erases everything (both ask you to type `uninstall` first).

@@ -4,9 +4,9 @@
 #
 # First run installs; later runs update (`helio update` takes a pre-update DB
 # backup, applies the bundle and migrates; a failed backup/migration aborts).
-# Release bundles and images come from the repo named by the HELIO_REPO
-# Variable (default: the upstream project, whose v* images are public). Point
-# it at this repo only after release.yml has published your own release.
+# Release bundles and images come from this repo's own releases (release.yml
+# builds ghcr.io/<owner>/helio-* and the bundle on every v* tag). Set the
+# HELIO_REPO Variable only to deploy from a different repo.
 #
 # Setup: a runner labelled `helio-deploy` whose user can run docker and owns
 # $HOME/.helio; Variables APP_URL (e.g. https://mailbot.io.vn) and optionally
@@ -33,6 +33,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   deploy:
@@ -43,7 +44,7 @@ jobs:
       # Never interpolate input into the shell; it goes through env.
       VERSION: ${{ inputs.version }}
       PROFILE: ${{ inputs.profile }}
-      HELIO_REPO: ${{ vars.HELIO_REPO || 'achref-soua/helio' }}
+      HELIO_REPO: ${{ vars.HELIO_REPO || github.repository }}
       APP_URL: ${{ vars.APP_URL }}
       PUBLIC_TRACKING_URL: ${{ vars.PUBLIC_TRACKING_URL }}
       HELIO_YES: '1'
@@ -57,6 +58,13 @@ jobs:
           [ -n "$APP_URL" ] || { echo "set the APP_URL variable (e.g. https://mailbot.io.vn)" >&2; exit 1; }
           printf '%s' "$APP_URL" | grep -Eq '^https?://[A-Za-z0-9.:-]+$' \
             || { echo "APP_URL must be scheme://host[:port], no trailing slash" >&2; exit 1; }
+      - name: Log in to GHCR
+        # Images are private until the packages are made public; this job's
+        # token can read the packages release.yml pushed for this repo.
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
       - name: Install or update Helio
         run: |
           set -eu
