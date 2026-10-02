@@ -7,7 +7,7 @@
 # its checksum, generates this install's secrets, and brings the stack up.
 #
 # Quickstart (Mac/Linux/WSL):
-#   curl -fsSL https://raw.githubusercontent.com/achref-soua/helio/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/quyetnx/helio/main/scripts/install.sh | sh
 #
 # Or download it and run a command:
 #   ./install.sh                 # interactive menu
@@ -20,7 +20,7 @@
 # Windows: use install.ps1 (or run this under WSL).
 set -eu
 
-REPO="${HELIO_REPO:-achref-soua/helio}"
+REPO="${HELIO_REPO:-quyetnx/helio}"
 HELIO_HOME="${HELIO_HOME:-$HOME/.helio}"
 COMPOSE_FILE="$HELIO_HOME/docker-compose.yml"
 ENV_FILE="$HELIO_HOME/.env"
