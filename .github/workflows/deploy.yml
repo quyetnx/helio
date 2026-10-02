@@ -48,6 +48,6 @@ jobs:
           done
           echo "release assets for $VERSION never appeared" >&2; exit 1
       - name: Update Helio
-        run: "$HOME/.helio/helio update --version \"$VERSION\" --yes"
+        run: '$HOME/.helio/helio update --version "$VERSION" --yes'
       - name: Status
         run: '"$HOME/.helio/helio" status'
