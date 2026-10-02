@@ -1,7 +1,7 @@
 # Pull-request and trunk CI — the automated form of `task verify`. Until now
 # the only gate was running that locally, which is how a red e2e suite and a
-# journey double-send reached a release. This runs on every PR into develop/
-# main and on every push to them, so regressions are caught before merge.
+# journey double-send reached a release. This runs on every PR into main
+# and on every push to it, so regressions are caught before merge.
 #
 # The `verify` and `python` jobs mirror `task verify` (format, lint, typecheck,
 # TS tests, then the Python checks). The `e2e` job runs the Playwright suite
@@ -13,15 +13,15 @@
 # environment/correctness reasons (a dev-only env flag the CI app never read, a
 # test reading a button label instead of the booking link); those are fixed and
 # the suite has been green with zero retries across consecutive runs. To make a
-# red shard also block the merge, add the `e2e (1..4)` contexts to the develop/
+# red shard also block the merge, add the `e2e (1..4)` contexts to the
 # main required-status-checks ruleset. Locally it stays `task verify:e2e`.
 name: ci
 
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [main]
   push:
-    branches: [develop, main]
+    branches: [main]
 
 # A newer push to the same ref cancels the in-flight run.
 concurrency:
