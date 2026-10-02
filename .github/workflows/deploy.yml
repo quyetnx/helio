@@ -7,8 +7,9 @@
 #
 # The runner needs the label `helio-deploy` (see docs/runbooks/production-ops.md
 # for registering it next to other runners) and a user that can run docker and
-# owns $HOME/.helio. Add required reviewers to the `production` environment to
-# gate deploys.
+# owns $HOME/.helio. Set the Variables APP_URL (e.g. https://mailbot.io.vn) and
+# optionally PUBLIC_TRACKING_URL on the `production` environment, and add
+# required reviewers there to gate deploys.
 name: deploy
 
 on:
@@ -49,5 +50,34 @@ jobs:
           echo "release assets for $VERSION never appeared" >&2; exit 1
       - name: Update Helio
         run: '$HOME/.helio/helio update --version "$VERSION" --yes'
+      - name: Apply public URLs from GitHub Variables
+        # `helio update` only appends new keys to .env, so values that live in
+        # repo/environment Variables (APP_URL, PUBLIC_TRACKING_URL) are synced
+        # here. The stack restarts only when a value actually changed.
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          PUBLIC_TRACKING_URL: ${{ vars.PUBLIC_TRACKING_URL }}
+        run: |
+          set -eu
+          ENV_FILE="$HOME/.helio/.env"
+          changed=0
+          sync() {
+            key="$1"; val="$2"
+            [ -n "$val" ] || return 0
+            printf '%s' "$val" | grep -Eq '^https?://[A-Za-z0-9.:-]+$' \
+              || { echo "refusing $key: must be scheme://host[:port], no trailing slash" >&2; exit 1; }
+            if grep -qx "$key=$val" "$ENV_FILE"; then return 0; fi
+            if grep -q "^$key=" "$ENV_FILE"; then
+              sed -i "s|^$key=.*|$key=$val|" "$ENV_FILE"
+            else
+              printf '%s=%s\n' "$key" "$val" >> "$ENV_FILE"
+            fi
+            changed=1
+          }
+          sync APP_URL "$APP_URL"
+          sync PUBLIC_TRACKING_URL "$PUBLIC_TRACKING_URL"
+          if [ "$changed" = 1 ]; then
+            "$HOME/.helio/helio" stop && "$HOME/.helio/helio" start
+          fi
       - name: Status
         run: '"$HOME/.helio/helio" status'
