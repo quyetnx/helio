@@ -9,6 +9,7 @@ from .base import LLMProvider
 from .factory import create_llm_provider
 from .types import (
     AssistantMessage,
+    ImagePart,
     LLMResponse,
     Message,
     SystemMessage,
@@ -25,6 +26,7 @@ __all__ = [
     "SystemMessage",
     "UserMessage",
     "AssistantMessage",
+    "ImagePart",
     "ToolMessage",
     "ToolCall",
     "ToolSpec",

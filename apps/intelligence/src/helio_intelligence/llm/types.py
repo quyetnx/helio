@@ -37,8 +37,17 @@ class SystemMessage:
 
 
 @dataclass(frozen=True)
+class ImagePart:
+    """An image attached to a user turn, as base64 (no ``data:`` prefix)."""
+
+    media_type: str
+    data: str
+
+
+@dataclass(frozen=True)
 class UserMessage:
     content: str
+    images: tuple[ImagePart, ...] = ()
     role: Literal["user"] = "user"
 
 

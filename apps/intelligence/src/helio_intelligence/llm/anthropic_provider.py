@@ -44,7 +44,22 @@ def _to_anthropic_messages(messages: Sequence[Message]) -> tuple[str, list[dict[
         if isinstance(message, SystemMessage):
             system_parts.append(message.content)
         elif isinstance(message, UserMessage):
-            converted.append({"role": "user", "content": message.content})
+            if message.images:
+                content: list[dict[str, Any]] = [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": image.media_type,
+                            "data": image.data,
+                        },
+                    }
+                    for image in message.images
+                ]
+                content.append({"type": "text", "text": message.content})
+                converted.append({"role": "user", "content": content})
+            else:
+                converted.append({"role": "user", "content": message.content})
         elif isinstance(message, ToolMessage):
             converted.append(
                 {

@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { useActiveWorkspaceId } from '@/components/workspace-switcher';
 import { useTRPC } from '@/trpc/client';
 
+import { ImageToTemplate } from './image-to-template';
 import { draftToDocument, newBlock, TemplateEditor } from './template-editor';
 
 export function TemplatesView() {
@@ -156,6 +157,16 @@ export function TemplatesView() {
                 />
               </div>
             </div>
+
+            <ImageToTemplate
+              workspaceId={workspaceId}
+              onDraft={(draft) => {
+                setBlocks(draft.blocks);
+                setSubject(draft.subject);
+                // Keep a name the user already typed; otherwise take the suggestion.
+                setName((current) => current.trim() || draft.name);
+              }}
+            />
 
             <TemplateEditor subject={subject} blocks={blocks} onBlocksChange={setBlocks} />
 

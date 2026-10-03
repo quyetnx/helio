@@ -602,6 +602,24 @@
       "alignCenter": "Align center",
       "alignRight": "Align right",
       "imageRadius": "Corner rounding"
+    },
+    "fromImage": {
+      "title": "Create from an image",
+      "hint": "Drop, choose or paste a screenshot or mockup of an email. The AI copilot rebuilds it as editable blocks.",
+      "choose": "Choose an image",
+      "previewAlt": "Preview of {name}",
+      "pastedImage": "Pasted image",
+      "guidance": "Extra guidance (optional)",
+      "guidancePlaceholder": "e.g. keep it shorter, make the tone friendlier",
+      "generate": "Build template with AI",
+      "working": "Reading the image…",
+      "remove": "Remove image",
+      "replaces": "The result replaces the blocks and subject below. Nothing is saved until you press Create.",
+      "done": "Draft ready — review it, then save.",
+      "badType": "Use a PNG, JPEG, WebP or GIF image.",
+      "tooLarge": "The image is larger than 5 MB.",
+      "readError": "Could not read that file.",
+      "error": "The AI could not read that image. Try another one."
     }
   },
   "campaigns": {
