@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each entry links to its full release notes on GitHub. Versions are tagged on
 `main`; per-PR detail lives in the linked GitHub release.
 
+## [2.3.2](https://github.com/quyetnx/helio/compare/v2.3.1...v2.3.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* **intelligence:** retry Anthropic calls without temperature when the model rejects it ([#8](https://github.com/quyetnx/helio/issues/8)) ([5d84ac5](https://github.com/quyetnx/helio/commit/5d84ac5471b607fc08e19027b330ab19ede9f67e))
+
 ## [Unreleased]
 
 ## [2.3.1] — 2026-06-29
