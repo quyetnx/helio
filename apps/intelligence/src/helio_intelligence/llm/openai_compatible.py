@@ -28,6 +28,16 @@ def _to_openai_message(message: Message) -> dict[str, Any]:
     if isinstance(message, SystemMessage):
         return {"role": "system", "content": message.content}
     if isinstance(message, UserMessage):
+        if message.images:
+            parts: list[dict[str, Any]] = [{"type": "text", "text": message.content}]
+            parts.extend(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{image.media_type};base64,{image.data}"},
+                }
+                for image in message.images
+            )
+            return {"role": "user", "content": parts}
         return {"role": "user", "content": message.content}
     if isinstance(message, ToolMessage):
         return {

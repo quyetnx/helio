@@ -1,3 +1,4 @@
+import base64
 import json
 
 import pytest
@@ -17,7 +18,7 @@ from helio_intelligence.generation_api import (
     get_repository,
     get_segment_generator,
 )
-from helio_intelligence.llm import LLMResponse
+from helio_intelligence.llm import ImagePart, LLMResponse
 from helio_intelligence.llm.fake import FakeProvider
 
 VALID_SEGMENT = {
@@ -251,6 +252,87 @@ def test_email_endpoint_uses_org_voice() -> None:
     assert body["document"]["blocks"][2]["url"] == "https://app.helio.dev/upgrade"
 
 
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+_PNG_B64 = base64.b64encode(_PNG).decode()
+
+
+async def test_nl_email_from_image_sends_the_image_and_validates() -> None:
+    provider = FakeProvider([LLMResponse(text=json.dumps(VALID_EMAIL))])
+    image = ImagePart(media_type="image/png", data=_PNG_B64)
+    result = await NlEmailGenerator(provider).generate_from_image(
+        image, "keep it short", ["Welcome to Helio"]
+    )
+    assert result.subject.startswith("Your trial ends")
+    assert result.name == "Keep It Short"
+    user = provider.calls[0]["messages"][-1]
+    assert user.images == (image,)
+    assert "keep it short" in user.content
+    assert "Welcome to Helio" in user.content
+
+
+async def test_nl_email_from_image_repairs_then_gives_up() -> None:
+    image = ImagePart(media_type="image/png", data=_PNG_B64)
+    repaired = FakeProvider([LLMResponse(text="oops"), LLMResponse(text=json.dumps(VALID_EMAIL))])
+    assert (await NlEmailGenerator(repaired).generate_from_image(image)).subject
+    failing = FakeProvider([LLMResponse(text="x"), LLMResponse(text="y"), LLMResponse(text="z")])
+    with pytest.raises(ValueError, match="could not produce"):
+        await NlEmailGenerator(failing).generate_from_image(image)
+
+
+def _image_client() -> TestClient:
+    app = create_app()
+    app.dependency_overrides[get_email_generator] = lambda: NlEmailGenerator(
+        FakeProvider([LLMResponse(text=json.dumps(VALID_EMAIL))])
+    )
+    app.dependency_overrides[get_repository] = lambda: _Repo()
+    return TestClient(app)
+
+
+def _image_body(**overrides: str) -> dict[str, str]:
+    body = {
+        "organization_id": "o",
+        "workspace_id": "w",
+        "image_base64": _PNG_B64,
+        "media_type": "image/png",
+        "prompt": "",
+    }
+    body.update(overrides)
+    return body
+
+
+def test_email_from_image_endpoint() -> None:
+    response = _image_client().post("/v1/copilot/email-from-image", json=_image_body())
+    assert response.status_code == 200
+    assert response.json()["document"]["blocks"][0]["type"] == "heading"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"media_type": "image/svg+xml"}, "PNG, JPEG, WebP or GIF"),
+        ({"image_base64": "not base64!!!!!!!!"}, "not valid base64"),
+        (
+            {"image_base64": base64.b64encode(b"plain text, not an image at all").decode()},
+            "does not match",
+        ),
+        ({"media_type": "image/jpeg"}, "does not match"),
+    ],
+)
+def test_email_from_image_rejects_bad_images(overrides: dict[str, str], message: str) -> None:
+    response = _image_client().post("/v1/copilot/email-from-image", json=_image_body(**overrides))
+    assert response.status_code == 422
+    assert message in response.text
+
+
+def test_email_from_image_rejects_oversized_images() -> None:
+    big = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * (5 * 1024 * 1024)).decode()
+    response = _image_client().post(
+        "/v1/copilot/email-from-image", json=_image_body(image_base64=big)
+    )
+    assert response.status_code == 422
+    assert "larger than 5 MB" in response.text
+
+
 def test_generation_endpoints_503_until_configured() -> None:
     client = TestClient(create_app())
     seg = client.post(
@@ -263,6 +345,8 @@ def test_generation_endpoints_503_until_configured() -> None:
         json={"organization_id": "o", "workspace_id": "w", "prompt": "x"},
     )
     assert email.status_code == 503
+    image = client.post("/v1/copilot/email-from-image", json=_image_body())
+    assert image.status_code == 503
 
 
 async def test_nl_journey_dump_omits_null_edge_labels() -> None:

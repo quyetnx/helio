@@ -25,6 +25,9 @@ function parseDraft<T>(schema: { parse: (value: unknown) => T }, value: unknown)
  * model never picks the tenant. Drafts are returned for review; saving
  * goes through the normal segment/journey routers, which re-validate.
  */
+/** Largest image the AI plane accepts (Anthropic caps images at 5 MB). */
+export const MAX_EMAIL_IMAGE_BYTES = 5 * 1024 * 1024;
+
 export const copilotRouter = router({
   /** Which AI provider serves this org — null when the AI plane is down. */
   providerInfo: orgProcedure.query(async ({ ctx }) => {
@@ -89,6 +92,33 @@ export const copilotRouter = router({
       const draft = await intelligence.draftEmail({
         organization_id: ctx.organizationId,
         workspace_id: input.workspaceId,
+        prompt: input.prompt,
+      });
+      const document = parseDraft(emailDocumentSchema, draft.document);
+      return { name: draft.name, subject: draft.subject, document };
+    }),
+
+  /** Draft an email template from a screenshot or mockup. */
+  draftEmailFromImage: orgProcedure
+    .input(
+      z.object({
+        workspaceId: z.string().min(1),
+        // base64 of the raw file (no data: prefix); 4/3 of the byte cap.
+        imageBase64: z
+          .string()
+          .min(16)
+          .max((MAX_EMAIL_IMAGE_BYTES * 4) / 3 + 16)
+          .regex(/^[A-Za-z0-9+/]+={0,2}$/, 'The image is not valid base64.'),
+        mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+        prompt: z.string().max(1000).default(''),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const draft = await intelligence.draftEmailFromImage({
+        organization_id: ctx.organizationId,
+        workspace_id: input.workspaceId,
+        image_base64: input.imageBase64,
+        media_type: input.mediaType,
         prompt: input.prompt,
       });
       const document = parseDraft(emailDocumentSchema, draft.document);

@@ -10,7 +10,7 @@ import { env } from './env';
  * optional service, so the rest of the product never breaks when it is
  * down or unconfigured.
  */
-async function call<T>(path: string, body: unknown): Promise<T> {
+async function call<T>(path: string, body: unknown, timeoutMs = 60_000): Promise<T> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   // Authenticate to the intelligence service so its /v1 surface — which trusts
   // the org id we forward — can't be driven by anyone else on the network.
@@ -21,7 +21,7 @@ async function call<T>(path: string, body: unknown): Promise<T> {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     throw new TRPCError({
@@ -118,6 +118,16 @@ export const intelligence = {
 
   draftEmail: (input: { organization_id: string; workspace_id: string; prompt: string }) =>
     call<DraftEmail>('/v1/copilot/email', input),
+
+  /** Rebuild the layout in an image (screenshot/mockup) as an email draft. A
+   *  vision call is slower than a text one, hence the longer timeout. */
+  draftEmailFromImage: (input: {
+    organization_id: string;
+    workspace_id: string;
+    image_base64: string;
+    media_type: string;
+    prompt: string;
+  }) => call<DraftEmail>('/v1/copilot/email-from-image', input, 120_000),
 
   recompute: (input: { organization_id: string; workspace_id: string }) =>
     call<ScoringResult>('/v1/scoring/recompute', input),

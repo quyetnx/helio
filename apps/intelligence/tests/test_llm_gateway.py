@@ -8,6 +8,7 @@ from pydantic import SecretStr
 
 from helio_intelligence.llm import (
     AssistantMessage,
+    ImagePart,
     SystemMessage,
     ToolCall,
     ToolMessage,
@@ -59,6 +60,27 @@ def test_openai_tool_translation() -> None:
         "type": "function",
         "function": {"name": "count", "description": "counts", "parameters": {"type": "object"}},
     }
+
+
+def test_images_become_provider_specific_content_parts() -> None:
+    image = ImagePart(media_type="image/png", data="QUJD")
+    message = UserMessage("describe", images=(image,))
+    _, converted = _to_anthropic_messages([message])
+    assert converted[0]["content"] == [
+        {
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/png", "data": "QUJD"},
+        },
+        {"type": "text", "text": "describe"},
+    ]
+    assert _to_openai_message(message) == {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "describe"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,QUJD"}},
+        ],
+    }
+    assert _to_openai_message(UserMessage("plain")) == {"role": "user", "content": "plain"}
 
 
 def test_anthropic_splits_system_and_blocks_tool_io() -> None:

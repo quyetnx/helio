@@ -1,8 +1,8 @@
 # Install or update Helio on the server this self-hosted runner lives on (a
-# Docker Compose install managed via ~/.helio/helio). The job runs ON the
+# Docker Compose install managed via $HELIO_HOME/helio). The job runs ON the
 # server, so no SSH keys or kubeconfig are stored in GitHub.
 #
-# First run installs; later runs update (`helio update` takes a pre-update DB
+# First run installs; later runs update (the update takes a pre-update DB
 # backup, applies the bundle and migrates; a failed backup/migration aborts).
 # Release bundles and images come from this repo's own releases (release.yml
 # builds ghcr.io/<owner>/helio-* and the bundle on every v* tag). Set the
@@ -71,17 +71,24 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
       - name: Install or update Helio
+        # Always runs the installer script from this repo rather than an
+        # installed ~/helio: it works on a fresh server, on a healthy install,
+        # and on a half-finished one (manifest present, no `helio` command).
         run: |
           set -eu
-          HELIO="$HELIO_HOME/helio"
-          if [ -x "$HELIO" ]; then
-            "$HELIO" update ${VERSION:+--version "$VERSION"} --yes
+          curl -fsSL "https://raw.githubusercontent.com/$HELIO_REPO/main/scripts/install.sh" -o "$RUNNER_TEMP/install.sh"
+          if [ -f "$HELIO_HOME/manifest.json" ]; then
+            sh "$RUNNER_TEMP/install.sh" update ${VERSION:+--version "$VERSION"} --yes
           else
             export HELIO_APP_URL="$APP_URL"
-            curl -fsSL "https://raw.githubusercontent.com/$HELIO_REPO/main/scripts/install.sh" -o "$RUNNER_TEMP/install.sh"
             sh "$RUNNER_TEMP/install.sh" install --yes \
               ${VERSION:+--version "$VERSION"} \
               $([ "$PROFILE" = core ] && echo --core)
+          fi
+          # Leave the management command behind (`helio status | logs | update`).
+          if [ ! -x "$HELIO_HOME/helio" ]; then
+            cp "$RUNNER_TEMP/install.sh" "$HELIO_HOME/helio"
+            chmod +x "$HELIO_HOME/helio"
           fi
       - name: Apply public URLs from GitHub Variables
         # `helio update` only appends new keys to .env, so values that live in
